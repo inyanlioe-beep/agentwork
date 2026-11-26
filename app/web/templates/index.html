@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101311">
+  <title>Agent Workspace</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css?v=0.5.0">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navigasi workspace">
+      <a class="brand" href="/" aria-label="Agent Workspace home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3.5 14.2 9l5.8 2-5.8 2L12 18.5 9.8 13 4 11l5.8-2L12 3.5Z"/><path d="m19 15 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"/></svg>
+        </span>
+        <span><strong>agent<span class="brand-light">work</span></strong><small>AI TEAM WORKSPACE</small></span>
+      </a>
+
+      <button id="new-task-button" class="new-task-button" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Tugas baru</span>
+        <span class="shortcut">N</span>
+      </button>
+
+      <div class="nav-label">WORKSPACE</div>
+      <nav class="side-nav">
+        <a class="nav-item active" href="#tasks">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h4"/></svg>
+          <span>Semua tugas</span>
+          <span class="nav-count" id="task-count">0</span>
+        </a>
+        <button id="manage-agents-button" class="nav-item" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M4 20c0-3.3 2.7-6 6-6h4c3.3 0 6 2.7 6 6"/></svg>
+          <span>Kelola agent</span>
+        </button>
+      </nav>
+
+      <div class="history-heading"><span class="nav-label">RIWAYAT TERBARU</span><button id="refresh-tasks" class="icon-button subtle" type="button" aria-label="Muat ulang daftar tugas" title="Muat ulang">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2"/></svg>
+      </button></div>
+      <div id="task-list" class="task-list" aria-live="polite"></div>
+
+      <div class="sidebar-footer">
+        <span class="connection-dot" id="connection-dot"></span>
+        <span id="connection-label">Menghubungkan...</span>
+        <button id="theme-toggle" class="icon-button subtle theme-button" type="button" aria-label="Ganti tema">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8 8.5 8.5 0 1 0 20.2 15.4Z"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Workspace</span><span class="crumb-separator">/</span><strong id="breadcrumb-task">Tugas baru</strong></div>
+        <div class="topbar-right">
+          <span class="live-pill"><span></span> LIVE</span>
+          <button id="about-button" class="icon-button top-icon" type="button" aria-label="Tentang workspace" title="Tentang workspace">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <section id="welcome-view" class="welcome-view">
+        <div class="welcome-badge"><span class="sparkle" aria-hidden="true">✦</span> YOUR AI TEAM, IN SYNC</div>
+        <h1>Ide besar dimulai<br>di <span>satu tempat.</span></h1>
+        <p>Berikan tugas ke orkestrator. Tim AI-mu akan menyusun rencana, membagi pekerjaan, dan menyatukan hasilnya.</p>
+        <form id="welcome-form" class="welcome-composer">
+          <label for="welcome-input" class="sr-only">Tulis instruksi tugas</label>
+          <textarea id="welcome-input" rows="3" maxlength="20000" placeholder="Apa yang ingin kamu kerjakan hari ini?" required></textarea>
+          <div class="composer-bottom">
+            <span class="composer-hint"><kbd>Enter</kbd> untuk mulai <span class="hint-divider">·</span> <kbd>Shift + Enter</kbd> baris baru</span>
+            <button class="send-button" type="submit"><span>Mulai tugas</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+          </div>
+        </form>
+        <div class="suggestion-row">
+          <span>Coba:</span>
+          <button class="suggestion" type="button" data-prompt="Buat rencana peluncuran produk sederhana untuk aplikasi manajemen tugas.">Rencana peluncuran produk</button>
+          <button class="suggestion" type="button" data-prompt="Analisis ide bisnis kedai kopi kecil di dekat kampus.">Analisis ide bisnis</button>
+        </div>
+        <div class="welcome-agents">
+          <div class="avatar-stack" aria-hidden="true"><span class="avatar avatar-orion">O</span><span class="avatar avatar-nova">N</span><span class="avatar avatar-lyra">L</span></div>
+          <span>Orchestrator + <strong>2 spesialis</strong> siap membantu</span>
+        </div>
+      </section>
+
+      <section id="conversation-view" class="conversation-view hidden" aria-label="Percakapan tugas">
+        <div class="conversation-heading">
+          <div><div class="eyebrow">TASK ROOM</div><h1 id="conversation-title">Tugas</h1></div>
+          <div class="task-controls">
+            <button id="export-transcript" class="export-button" type="button" aria-label="Ekspor transcript tugas">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
+              <span>Ekspor</span>
+            </button>
+            <button id="cancel-task" class="cancel-button hidden" type="button">Batalkan tugas</button>
+            <div id="task-status" class="status-badge status-queued"><span class="status-dot"></span><span>Menunggu</span></div>
+          </div>
+        </div>
+        <div class="conversation-layout">
+          <div class="timeline-column">
+            <div class="timeline-toolbar"><span>AKTIVITAS TIM</span><span id="activity-count">0 pesan</span></div>
+            <div id="agent-filters" class="agent-filters" role="group" aria-label="Filter pesan berdasarkan agent"></div>
+            <div id="message-list" class="message-list" aria-live="polite" aria-relevant="additions"></div>
+            <button id="jump-latest" class="jump-button hidden" type="button">Pesan terbaru ↓</button>
+            <div id="working-indicator" class="working-indicator hidden"><span class="typing-dots"><i></i><i></i><i></i></span><span>Tim sedang bekerja</span></div>
+            <section id="question-panel" class="question-panel hidden" aria-live="polite" aria-labelledby="question-title">
+              <div class="question-heading"><span class="question-mark" aria-hidden="true">?</span><div><h2 id="question-title">Butuh jawabanmu</h2><p id="pending-question"></p></div></div>
+              <form id="answer-form" class="answer-form">
+                <label for="human-answer" class="sr-only">Jawaban untuk agent</label>
+                <textarea id="human-answer" rows="2" maxlength="4000" placeholder="Tulis jawaban atau konteks tambahan..." required></textarea>
+                <button class="send-button answer-button" type="submit">Kirim jawaban<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+              </form>
+            </section>
+            <form id="conversation-form" class="conversation-composer">
+              <label for="conversation-input" class="sr-only">Berikan tugas berikutnya</label>
+              <textarea id="conversation-input" rows="1" maxlength="20000" placeholder="Tulis instruksi atau tindak lanjut..." required></textarea>
+              <div class="conversation-composer-footer"><span>Instruksi baru akan memulai task terpisah</span><button class="send-button compact" type="submit" aria-label="Kirim instruksi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+            </form>
+          </div>
+          <aside class="inspector" aria-label="Detail tim dan rencana">
+            <section class="inspector-section">
+              <div class="section-title"><span>TIM AGENT</span><span id="agent-count" class="small-count">0</span></div>
+              <div id="agent-list" class="agent-list"></div>
+            </section>
+            <section class="inspector-section plan-section">
+              <div class="section-title"><span>RENCANA KERJA</span><span class="plan-icon" aria-hidden="true">↗</span></div>
+              <div id="plan-list" class="plan-list"><div class="empty-plan">Rencana muncul saat orkestrator mulai bekerja.</div></div>
+            </section>
+            <section class="inspector-section task-meta">
+              <div class="section-title"><span>DETAIL TUGAS</span></div>
+              <div class="meta-row"><span>Dibuat</span><strong id="task-created">—</strong></div>
+              <div class="meta-row"><span>ID</span><strong id="task-id-short">—</strong></div>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="about-dialog" class="about-dialog">
+    <form method="dialog"><button class="dialog-close" aria-label="Tutup">×</button></form>
+    <div class="welcome-badge"><span class="sparkle" aria-hidden="true">✦</span> AGENT WORKSPACE</div>
+    <h2>Kolaborasi, terlihat jelas.</h2>
+    <p>Orchestrator membagi pekerjaan kepada agent spesialis. Setiap instruksi dan hasil disimpan dan ditampilkan dalam satu timeline.</p>
+    <p class="dialog-note">Tahap ini menjalankan provider mock secara default. Koneksi provider nyata dikonfigurasi melalui backend.</p>
+    <form method="dialog"><button class="send-button dialog-done">Mengerti</button></form>
+  </dialog>
+  <dialog id="agent-dialog" class="agent-dialog">
+    <form id="agent-form" method="dialog">
+      <div class="dialog-header">
+        <h2 id="agent-dialog-title">Tambah Agent</h2>
+        <button type="button" class="dialog-close" aria-label="Tutup">×</button>
+      </div>
+      <div class="dialog-body">
+        <div class="form-group">
+          <label for="agent-id">ID Agent <span class="required">*</span></label>
+          <input type="text" id="agent-id" name="id" pattern="[a-z0-9_\-]+" placeholder="researcher" required maxlength="50">
+          <small>Lowercase, hanya huruf, angka, dash, underscore</small>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="agent-name">Nama <span class="required">*</span></label>
+            <input type="text" id="agent-name" name="name" placeholder="Researcher" required maxlength="100">
+          </div>
+          <div class="form-group">
+            <label for="agent-emoji">Emoji</label>
+            <input type="text" id="agent-emoji" name="emoji" placeholder="🔍" maxlength="10">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="agent-provider">Provider <span class="required">*</span></label>
+            <select id="agent-provider" name="provider" required>
+              <option value="">Pilih provider...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="agent-model">Model <span class="required">*</span></label>
+            <select id="agent-model" name="model" required>
+              <option value="">Pilih model...</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="agent-role">Role <span class="required">*</span></label>
+          <select id="agent-role" name="role" required>
+            <option value="worker">Worker (Spesialis)</option>
+            <option value="orchestrator">Orchestrator (Koordinator)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="agent-persona">Persona <span class="required">*</span></label>
+          <textarea id="agent-persona" name="persona" rows="4" placeholder="You are a research specialist who analyzes requirements..." required maxlength="5000"></textarea>
+          <small>System prompt singkat untuk agent ini</small>
+        </div>
+        <div class="form-group">
+          <label for="agent-color">Warna Avatar</label>
+          <input type="color" id="agent-color" name="color" value="#8b5cf6">
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" class="button-secondary" data-action="cancel">Batal</button>
+        <button type="submit" class="send-button" id="agent-submit">Simpan Agent</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="agent-delete-dialog" class="confirm-dialog">
+    <form method="dialog">
+      <div class="dialog-header">
+        <h2>Hapus Agent?</h2>
+        <button type="button" class="dialog-close" aria-label="Tutup">×</button>
+      </div>
+      <div class="dialog-body">
+        <p id="delete-agent-message">Yakin ingin menghapus agent <strong id="delete-agent-name"></strong>?</p>
+        <p class="dialog-note">Agent dengan task aktif tidak bisa dihapus.</p>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" class="button-secondary" data-action="cancel">Batal</button>
+        <button type="button" class="button-danger" id="confirm-delete-agent">Hapus</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="/static/app.js?v=0.5.0" defer></script>
+</body>
+</html>
