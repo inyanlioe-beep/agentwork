@@ -2,6 +2,12 @@
 
 This file records implemented changes. Claims below describe repository history; current capability and limitations are summarized in `README.md` and `PLAN.md`.
 
+## v0.8.3 — 2026-11-26 (recovery failures end in a terminal status)
+
+- Recovery can no longer strand a task. `Orchestrator.resume_interrupted_task()` is now a thin wrapper around the former body (renamed `_recover_interrupted_task()`) that catches `TaskCancelledByUser` and every other error, persisting `failed` through the new `_record_recovery_failure()` helper — the same terminal write `run()` and the human-answer resume path already performed. Previously a provider that exhausted its retries during startup recovery raised straight out of the spawned coroutine, which only logged `Task execution failed: ...`, leaving the task in `running`/`review` with an `in_progress` step and no error visible through the API. Observed live on 2026-11-26 on a recovered task whose `writer` step used the `hemattoken` provider.
+- Resumed work clears stale `finished_at`. The interrupted `planning`, `running`, and `review` branches plus `_resume_cancelled_task()` now reset `finished_at` when a task returns to a non-terminal status, so a task that is running again no longer advertises a completion timestamp.
+- Added regression tests: a recovered `running` step whose provider keeps failing ends `failed` with an `error` message, a recovered `review` task whose summary provider fails ends `failed`, and a task resumed mid-step reports `finished_at=None` while it is running. `pytest tests -q` → 42 passed.
+
 ## v0.8.2 — 2026-11-26 (idempotent recovery and cancel/recovery interaction)
 
 - Recovery no longer duplicates provider calls. Steps that already stored a `result` before the interruption are adopted as-is: `_resume_cancelled_task()`, the remaining-step loop, and the interrupted-`review` summary path skip them instead of handing the work to a provider again.

@@ -26,7 +26,7 @@ For OpenAI, Groq, Ollama, or HematToken, set `AGENTWORK_PROVIDER` and `AGENTWORK
 - Pause for up to three worker clarification rounds per step.
 - Retry selected transient provider/network failures and empty/invalid responses.
 - Limit task creation to a configured number per minute per client IP.
-- Restore tasks waiting for human input after restart. Interrupted planning tasks restart from planning, running tasks resume saved execution state, review tasks rebuild their summary, and explicit cancellations remain stopped. Resumed work reuses deterministic message ids and adopts steps that already finished, so recovery does not repeat provider calls or duplicate transcript entries.
+- Restore tasks waiting for human input after restart. Interrupted planning tasks restart from planning, running tasks resume saved execution state, review tasks rebuild their summary, and explicit cancellations remain stopped. Resumed work reuses deterministic message ids and adopts steps that already finished, so recovery does not repeat provider calls or duplicate transcript entries. A recovered workflow whose provider gives up is persisted as `failed` instead of being left in `running`/`review`.
 
 ## API
 
@@ -65,7 +65,7 @@ Authentication is **not implemented**: the application has no registration/login
 
 Rate limiting uses Redis when available and otherwise uses a process-local sliding window. The Redis 429 response is not swallowed; memory fallback is not shared across processes. `X-Forwarded-For` is trusted only for configured proxy IPs.
 
-Startup restores `waiting_input` task waiters. Interrupted `planning` tasks restart from planning, interrupted `running` tasks resume saved step state, and interrupted `review` tasks rebuild the final summary. Explicit user cancellations remain stopped. Recovery is best-effort and not a durable distributed job queue: it only inspects the 50 most recent tasks, finished steps are adopted instead of re-run, messages use deterministic ids so replays overwrite rather than duplicate, and a workflow that is still finishing cannot overwrite an explicit cancellation.
+Startup restores `waiting_input` task waiters. Interrupted `planning` tasks restart from planning, interrupted `running` tasks resume saved step state, and interrupted `review` tasks rebuild the final summary. Explicit user cancellations remain stopped, and a recovered workflow that raises ends as `failed` instead of staying `running`/`review`. Recovery is best-effort and not a durable distributed job queue: it only inspects the 50 most recent tasks, finished steps are adopted instead of re-run, messages use deterministic ids so replays overwrite rather than duplicate, and a workflow that is still finishing cannot overwrite an explicit cancellation.
 
 ## Tests
 

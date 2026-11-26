@@ -18,7 +18,7 @@ Redis 429 responses now bypass the fallback exception path and are returned dire
 
 Replays no longer duplicate provider calls or transcript rows. Messages carry deterministic ids (`{task_id}:instruction`, `{task_id}:step:{index}:assignment|response`, `{task_id}:summary`), so a recovered workflow overwrites its own rows instead of appending second copies; steps that already stored a `result` are adopted without invoking a provider again; and `Orchestrator._set_status()` reads the persisted task and raises `TaskCancelledByUser` instead of writing `planning`/`running`/`review`/`done` over an explicit cancellation. Recovered workflows are registered in `app.state.task_jobs` through `Orchestrator._spawn()`, so `POST /api/tasks/{task_id}/cancel` stops them exactly like a freshly created task.
 
-Recovery remains best-effort: only the 50 most recent tasks are inspected at startup, there is no durable distributed job queue, and idempotency covers this application's own rows and provider calls, not arbitrary external side effects of a provider.
+Recovery remains best-effort: only the 50 most recent tasks are inspected at startup, there is no durable distributed job queue, and idempotency covers this application's own rows and provider calls, not arbitrary external side effects of a provider. A recovered workflow that raises is persisted as `failed` with an `error` transcript message instead of being left in `running`/`review` with an `in_progress` step, and a task that starts running again clears its stale `finished_at`.
 
 ### Provider and workflow scope
 
@@ -39,8 +39,8 @@ The v0.4.3 report stated that ten findings had been fixed and that tests/browser
 
 ## Verified checks — 2026-11-26
 
-- `python -m pytest tests -q` → **39 passed** (the 35 pre-change tests plus the recovery regressions added in this pass). The remaining warning is a dependency deprecation from Starlette's `TestClient`/`httpx` pairing.
+- `python -m pytest tests -q` → **42 passed** (the 35 pre-change tests plus the recovery regressions added in these passes; the three newest cover a recovered step whose provider keeps failing, a recovered `review` restart whose summary provider fails, and `finished_at` cleanup while a task runs again). The remaining warning is a dependency deprecation from Starlette's `TestClient`/`httpx` pairing.
 - `python -m compileall app` → no syntax errors.
 - Recovery regression tests added: `test_recovered_running_task_does_not_replay_completed_steps`, `test_recovery_replaces_partial_summary_instead_of_duplicating_it`, `test_cancelling_a_recovered_workflow_stops_its_execution`, and `test_set_status_refuses_to_overwrite_user_cancellation`.
-- Test strength was checked by mutation: forcing recovery to re-run an already-finished step fails the first test (`assert 'Mock result: ...' == 'Step one result'`), and detaching startup recovery from `app.state.task_jobs` fails the third (`assert '<task id>' in {}`). Both tests pass with the fix in place.
+- Test strength was checked by mutation: forcing recovery to re-run an already-finished step fails the first test (`assert 'Mock result: ...' == 'Step one result'`), detaching startup recovery from `app.state.task_jobs` fails the third (`assert '<task id>' in {}`), and replacing the `_record_recovery_failure()` call in the recovery wrapper with `raise` fails `test_recovery_marks_task_failed_when_provider_keeps_failing` and `test_recovery_marks_task_failed_when_review_restart_fails`. All of them pass with the fix in place.
 - Redis was not reachable in this environment, so the limiter exercised its in-memory fallback during the API tests.

@@ -491,6 +491,41 @@ class Orchestrator:
         return task
 
     async def resume_interrupted_task(self, task: Task) -> None:
+        """Recover interrupted work, always ending in a terminal status.
+
+        Recovery calls providers, so it can fail like any other workflow. Leaving the
+        task non-terminal would strand it in ``running``/``review`` with an
+        ``in_progress`` step and no error surfaced through the API, so a raised error
+        is persisted as ``failed`` (matching ``run()`` and the human-answer resume path).
+        """
+        try:
+            await self._recover_interrupted_task(task)
+        except TaskCancelledByUser:
+            logger.info("Task %s stopped after explicit user cancellation", task.id)
+        except Exception as exc:
+            await self._record_recovery_failure(task, exc)
+
+    async def _record_recovery_failure(self, task: Task, exc: Exception) -> None:
+        """Persist a terminal failure for a recovered workflow that raised."""
+        if await self._is_cancelled_by_user(task):
+            logger.info("Task %s failure ignored because the user cancelled it", task.id)
+            return
+        logger.error("Task %s failed during recovery", task.id, exc_info=exc)
+        task.status = "failed"
+        task.finished_at = utc_now()
+        try:
+            await self.database.save_task(task)
+            await self._message(task.id, "system", "human", "error", str(exc))
+            await self._publish(
+                Event(task_id=task.id, type="task_update", payload=task.model_dump(mode="json"))
+            )
+        except Exception:
+            logger.exception(
+                "Failed to persist failure state for task %s after its original error",
+                task.id,
+            )
+
+    async def _recover_interrupted_task(self, task: Task) -> None:
         if task.cancelled_by_user:
             return
         if task.interrupted_status == "planning":
@@ -500,6 +535,7 @@ class Orchestrator:
             task.cancelled_context = None
             task.cancelled_by_user = False
             task.status = "queued"
+            task.finished_at = None
             await self.database.save_task(task)
             await self.run(task)
             return
@@ -507,6 +543,7 @@ class Orchestrator:
         if task.interrupted_status == "review":
             task.cancelled_by_user = False
             task.interrupted_status = None
+            task.finished_at = None
             await self._set_status(task, "review")
             orchestrator_config = await self._get_orchestrator()
             planner = AgentRuntime(
@@ -546,6 +583,7 @@ class Orchestrator:
             task.cancelled_step_index = None
             task.cancelled_context = None
             task.status = "queued"
+            task.finished_at = None
             await self.database.save_task(task)
             await self.run(task)
             return
@@ -554,6 +592,7 @@ class Orchestrator:
             task.cancelled_by_user = False
             task.interrupted_status = None
             task.status = "queued"
+            task.finished_at = None
             await self.database.save_task(task)
             await self.run(task)
             return
@@ -566,6 +605,7 @@ class Orchestrator:
             return
         task.cancelled_by_user = False
         task.interrupted_status = None
+        task.finished_at = None
         await self._set_status(task, "running")
         if task.cancelled_step_index is None:
             return

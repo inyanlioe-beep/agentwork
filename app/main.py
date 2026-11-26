@@ -83,7 +83,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 
-    app = FastAPI(title="Agent Workspace", version="0.8.2", lifespan=lifespan)
+    app = FastAPI(title="Agent Workspace", version="0.8.3", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
 
     # Add CORS middleware

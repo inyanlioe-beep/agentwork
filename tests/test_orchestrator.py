@@ -13,7 +13,7 @@ from app.bus import EventBus
 from app.config import PROJECT_ROOT, Settings
 from app.db import Database, default_agents
 from app.main import create_app
-from app.models import Event, Message, PlanStep, Task
+from app.models import Event, Message, PlanStep, Task, utc_now
 from app.providers.base import LLMProvider
 from app.providers.openai_compatible import OpenAICompatibleProvider
 
@@ -916,4 +916,206 @@ def test_recovery_replaces_partial_summary_instead_of_duplicating_it(tmp_path):
     assert len(summaries) == 1
     assert summaries[0].id == f"{task_id}:summary"
     assert summaries[0].content != "partial summary"
+
+
+def test_recovery_marks_task_failed_when_provider_keeps_failing(tmp_path, monkeypatch):
+    class BrokenWorkerProvider(LLMProvider):
+        async def complete(self, *, system_prompt: str, user_prompt: str) -> str:
+            if "Return only valid JSON" in user_prompt:
+                return '{"steps":[{"description":"Do the work","agent_id":"researcher"}]}'
+            raise RuntimeError("provider is down")
+
+    monkeypatch.setattr(
+        "app.agents.orchestrator.create_provider",
+        lambda provider_name, *, model, settings: BrokenWorkerProvider(),
+    )
+    db_path = tmp_path / "recovery-provider-failure.db"
+
+    async def seed():
+        database = Database(db_path)
+        await database.initialize()
+        for agent in default_agents():
+            await database.save_agent(agent)
+        task = Task(
+            title="Interrupted mid-step",
+            instruction="Recover this task",
+            status="running",
+            cancelled_step_index=1,
+            cancelled_context="Original request: Recover this task\nEarlier results:\n",
+        )
+        await database.save_task(task)
+        await database.save_step(
+            PlanStep(
+                task_id=task.id,
+                index=1,
+                description="Do the work",
+                agent_id="researcher",
+                status="in_progress",
+            )
+        )
+        return task.id
+
+    task_id = asyncio.run(seed())
+    app = create_app(Settings(database_path=db_path))
+    with TestClient(app):
+        async def read_state():
+            database = Database(db_path)
+            await database.initialize()
+            for _ in range(400):
+                task = await database.get_task(task_id)
+                if task and task.status in {"done", "failed"}:
+                    break
+                await asyncio.sleep(0.05)
+            return task, await database.list_messages(task_id)
+
+        task, messages = asyncio.run(read_state())
+
+    kinds = [message.kind for message in messages]
+    # A recovered workflow whose provider gives up must reach "failed" instead of
+    # staying "running" with an in_progress step and nothing surfaced to the caller.
+    assert task.status == "failed"
+    assert task.finished_at is not None
+    assert kinds.count("error") == 1
+    assert "summary" not in kinds
+
+
+
+def test_recovery_marks_task_failed_when_review_restart_fails(tmp_path, monkeypatch):
+    class BrokenSummaryProvider(LLMProvider):
+        async def complete(self, *, system_prompt: str, user_prompt: str) -> str:
+            raise RuntimeError("summary provider is down")
+
+    monkeypatch.setattr(
+        "app.agents.orchestrator.create_provider",
+        lambda provider_name, *, model, settings: BrokenSummaryProvider(),
+    )
+    db_path = tmp_path / "recovery-review-failure.db"
+
+    async def seed():
+        database = Database(db_path)
+        await database.initialize()
+        for agent in default_agents():
+            await database.save_agent(agent)
+        task = Task(
+            title="Interrupted summary",
+            instruction="Summarise the finished work",
+            status="cancelled",
+            interrupted_status="review",
+        )
+        await database.save_task(task)
+        await database.save_step(
+            PlanStep(
+                task_id=task.id,
+                index=1,
+                description="Do the work",
+                agent_id="researcher",
+                status="done",
+                result="Recorded result",
+            )
+        )
+        return task.id
+
+    task_id = asyncio.run(seed())
+    app = create_app(Settings(database_path=db_path))
+    with TestClient(app):
+        async def read_state():
+            database = Database(db_path)
+            await database.initialize()
+            for _ in range(400):
+                task = await database.get_task(task_id)
+                if task and task.status in {"done", "failed"}:
+                    break
+                await asyncio.sleep(0.05)
+            return task, await database.list_messages(task_id)
+
+        task, messages = asyncio.run(read_state())
+
+    kinds = [message.kind for message in messages]
+    # Rebuilding the summary after a restart can fail too, and that must not leave the
+    # task stuck in "review".
+    assert task.status == "failed"
+    assert task.finished_at is not None
+    assert kinds.count("error") == 1
+    assert "summary" not in kinds
+
+
+
+def test_recovery_clears_stale_finished_at_while_resuming(tmp_path, monkeypatch):
+    # The provider blocks until the test releases it, so the observations below are
+    # deterministic instead of racing the recovered workflow.
+    release = threading.Event()
+
+    class BlockingWorkerProvider(LLMProvider):
+        async def complete(self, *, system_prompt: str, user_prompt: str) -> str:
+            if "final summary" in user_prompt.lower():
+                return "Recovered summary"
+            while not release.is_set():
+                await asyncio.sleep(0.05)
+            return "Recovered step result"
+
+    monkeypatch.setattr(
+        "app.agents.orchestrator.create_provider",
+        lambda provider_name, *, model, settings: BlockingWorkerProvider(),
+    )
+    db_path = tmp_path / "recovery-finished-at.db"
+
+    async def seed():
+        database = Database(db_path)
+        await database.initialize()
+        for agent in default_agents():
+            await database.save_agent(agent)
+        task = Task(
+            title="Interrupted mid-step",
+            instruction="Recover this task",
+            status="running",
+            cancelled_step_index=1,
+            cancelled_context="Original request: Recover this task\nEarlier results:\n",
+            finished_at=utc_now(),
+        )
+        await database.save_task(task)
+        await database.save_step(
+            PlanStep(
+                task_id=task.id,
+                index=1,
+                description="Do the work",
+                agent_id="researcher",
+                status="in_progress",
+            )
+        )
+        return task.id
+
+    task_id = asyncio.run(seed())
+    app = create_app(Settings(database_path=db_path))
+    with TestClient(app):
+        async def read_while_running():
+            database = Database(db_path)
+            await database.initialize()
+            for _ in range(400):
+                task = await database.get_task(task_id)
+                if task and task.status == "running":
+                    break
+                await asyncio.sleep(0.05)
+            return task
+
+        running_task = asyncio.run(read_while_running())
+        assert running_task.status == "running"
+        # Work that is running again is no longer finished.
+        assert running_task.finished_at is None
+
+        release.set()
+
+        async def read_until_terminal():
+            database = Database(db_path)
+            await database.initialize()
+            for _ in range(400):
+                task = await database.get_task(task_id)
+                if task and task.status in {"done", "failed"}:
+                    break
+                await asyncio.sleep(0.05)
+            return task
+
+        final_task = asyncio.run(read_until_terminal())
+
+    assert final_task.status == "done"
+    assert final_task.finished_at is not None
 

@@ -56,7 +56,7 @@ Browser dashboard
 - Authentication scaffolding has been removed; no registration/login/profile endpoints or user ownership model is implemented.
 - CORS is configurable and credentials are disabled. WebSocket connections are connection-limited but not authenticated.
 - Redis 429 responses are enforced correctly; unavailable Redis falls back to process-local memory.
-- Startup distinguishes explicit cancellation from interruption, restores waiting-input workflows, restarts interrupted planning, resumes interrupted running steps, and rebuilds interrupted summaries. Recovery is idempotent for this application's own writes: finished steps are not re-run, messages use deterministic ids, and a workflow that is still finishing cannot write a non-cancelled status over an explicit cancellation.
+- Startup distinguishes explicit cancellation from interruption, restores waiting-input workflows, restarts interrupted planning, resumes interrupted running steps, rebuilds interrupted summaries, and persists `failed` when a recovered workflow gives up instead of leaving it stuck in `running`/`review`. Recovery is idempotent for this application's own writes: finished steps are not re-run, messages use deterministic ids, and a workflow that is still finishing cannot write a non-cancelled status over an explicit cancellation.
 - Agent calls execute sequentially. There is no separate quality-review/revision cycle, task token budget, or native Anthropic/Gemini adapter.
 - There is no durable distributed task queue or multi-instance coordination for running workflows.
 
