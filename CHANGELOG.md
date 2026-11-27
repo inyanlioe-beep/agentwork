@@ -2,6 +2,12 @@
 
 This file records implemented changes. Claims below describe repository history; current capability and limitations are summarized in `README.md` and `PLAN.md`.
 
+## v0.8.4 — 2026-11-27 (abandoned WebSocket connections are released)
+
+- Fixed WebSocket slots leaking until the next published event. `GET /ws` only awaited its own event queue, and a disconnected client was noticed only when a later `send_json` happened to fail, so `app.state.websocket_connections` kept an entry and `EventBus` kept a subscription for every closed or reloaded dashboard tab. The endpoint now reads from the socket while it pumps events, so a client that goes away releases its slot and its subscription immediately. Because uvicorn handles the resulting send failure silently (`run_asgi` swallows `ClientDisconnected`), the leak produced no log line and only surfaced once the limit was reached. Reproduced against a live server started with `AGENTWORK_WEBSOCKET_MAX_CONNECTIONS=1`: the connection after an abandoned one was refused with HTTP 403 before the fix and is accepted after it.
+- Added regression tests in `tests/test_websocket.py`: an abandoned connection frees its slot for the next client, and events still reach only the client whose `task_id` filter matches. Both fail against the previous endpoint, because the handler never learns that the client left. `pytest tests -q` → 44 passed.
+- Corrected `AUDIT_FINAL.md`, which still described the WebSocket endpoint as having no connection limit; `AGENTWORK_WEBSOCKET_MAX_CONNECTIONS` has capped concurrent connections since v0.8.0.
+
 ## v0.8.3 — 2026-11-26 (recovery failures end in a terminal status)
 
 - Recovery can no longer strand a task. `Orchestrator.resume_interrupted_task()` is now a thin wrapper around the former body (renamed `_recover_interrupted_task()`) that catches `TaskCancelledByUser` and every other error, persisting `failed` through the new `_record_recovery_failure()` helper — the same terminal write `run()` and the human-answer resume path already performed. Previously a provider that exhausted its retries during startup recovery raised straight out of the spawned coroutine, which only logged `Task execution failed: ...`, leaving the task in `running`/`review` with an `in_progress` step and no error visible through the API. Observed live on 2026-11-26 on a recovered task whose `writer` step used the `hemattoken` provider.

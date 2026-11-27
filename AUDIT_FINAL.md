@@ -26,7 +26,7 @@ The registry implements mock and an OpenAI-compatible adapter (usable with confi
 
 ### WebSocket and event delivery
 
-The WebSocket endpoint has no authentication or connection limit. Event bus queues are bounded (see `app/bus.py`), and slow subscribers may lose older queued events. Persisted event records are not exposed through a replay endpoint, so the browser's task/message refresh is not a full event replay mechanism.
+The WebSocket endpoint is not authenticated; concurrent connections are capped by `AGENTWORK_WEBSOCKET_MAX_CONNECTIONS` (default 100). A client that disconnects releases its slot and its bus subscription immediately, so closed or reloaded dashboard tabs do not consume the limit. Event bus queues are bounded (see `app/bus.py`), and slow subscribers may lose older queued events. Persisted event records are not exposed through a replay endpoint, so the browser's task/message refresh is not a full event replay mechanism.
 
 ## Historical audit status
 

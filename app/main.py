@@ -83,7 +83,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 
-    app = FastAPI(title="Agent Workspace", version="0.8.3", lifespan=lifespan)
+    app = FastAPI(title="Agent Workspace", version="0.8.4", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
 
     # Add CORS middleware
@@ -288,14 +288,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.websocket_connections.add(websocket)
         queue = bus.subscribe()
         task_filter = websocket.query_params.get("task_id")
-        try:
+
+        async def pump_events() -> None:
             while True:
                 event = await queue.get()
                 if task_filter is None or event.task_id == task_filter:
                     await websocket.send_json(event.model_dump(mode="json"))
+
+        pump_task = asyncio.create_task(pump_events())
+        try:
+            # Reading is the only way a browser close or reload becomes visible here: a send
+            # would raise on a dead socket, but nothing is sent while an idle client simply
+            # sits there. Without this loop an abandoned connection keeps its slot and its
+            # bus subscription until the next event happens to be published to that queue,
+            # which can exhaust websocket_max_connections.
+            while True:
+                message = await websocket.receive()
+                if message["type"] == "websocket.disconnect":
+                    # receive() reports the disconnect instead of raising it.
+                    raise WebSocketDisconnect(message["code"], message.get("reason"))
         except WebSocketDisconnect:
             pass
         finally:
+            pump_task.cancel()
+            await asyncio.gather(pump_task, return_exceptions=True)
             app.state.websocket_connections.discard(websocket)
             bus.unsubscribe(queue)
 

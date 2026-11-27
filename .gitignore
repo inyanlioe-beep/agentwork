@@ -4,3 +4,8 @@ __pycache__/
 .pytest_cache/
 data/
 *.py[cod]
+
+# local runtime artifacts (never commit logs or pid files)
+server.out.log
+server.err.log
+server.pid
